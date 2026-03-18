@@ -3,13 +3,14 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 from io import BytesIO
-import cv2
 import numpy as np
 from openai import OpenAI
 import asyncio
 import re
+import requests
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+ocr_key = os.getenv("OCR_API_KEY")
 
 EMAIL_REGEX = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
 
@@ -18,31 +19,64 @@ COMMON_DOMAINS = [
 ]
 
 # ---------------------------
-# IMAGE PREPROCESS
+# OCR API (OCR.Space)
 # ---------------------------
-def preprocess_image(pil_image):
-    img = np.array(pil_image)
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+def ocr_space_image(image_bytes):
+    url = "https://api.ocr.space/parse/image"
 
-    _, thresh = cv2.threshold(
-        blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
-    return thresh
+    payload = {
+        'apikey': ocr_key,  # free key
+        'language': 'eng',
+        'isOverlayRequired': False,
+        'scale': True,
+        'OCREngine': 2
+    }
+
+    files = {
+        'file': ('image.png', image_bytes)
+    }
+
+    try:
+        response = requests.post(url, files=files, data=payload)
+        result = response.json()
+
+        if result.get("IsErroredOnProcessing"):
+            return ""
+
+        parsed = result.get("ParsedResults")
+        if parsed:
+            return parsed[0].get("ParsedText", "")
+
+    except Exception as e:
+        print("OCR API error:", e)
+
+    return ""
 
 
 # ---------------------------
-# EXTRACT TEXT
+# EXTRACT TEXT (PDF + OCR API)
 # ---------------------------
 def extract_text_from_pdf(file):
     text = ""
 
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
+
+            # 1. thử text thường
             page_text = page.extract_text()
-            if page_text:
+
+            if page_text and len(page_text.strip()) > 50:
                 text += page_text + "\n"
+            else:
+                # 2. fallback OCR API
+                pil_image = page.to_image(resolution=300).original
+
+                img_bytes = BytesIO()
+                pil_image.save(img_bytes, format="PNG")
+                img_bytes = img_bytes.getvalue()
+
+                ocr_text = ocr_space_image(img_bytes)
+                text += ocr_text + "\n"
 
     return text
 
@@ -55,7 +89,7 @@ def extract_email_candidates(text):
 
 
 # ---------------------------
-# GENERATE VARIANTS (OCR FIX)
+# GENERATE VARIANTS
 # ---------------------------
 def generate_email_variants(email):
     variants = set([email])
@@ -80,19 +114,15 @@ def generate_email_variants(email):
 def score_email(email):
     score = 0
 
-    # domain chuẩn
     if any(domain in email for domain in COMMON_DOMAINS):
         score += 5
 
-    # length hợp lý
     if 10 <= len(email) <= 30:
         score += 2
 
-    # ít ký tự lạ
     if re.match(r'^[a-zA-Z0-9._@+-]+$', email):
         score += 2
 
-    # có số (thường user VN)
     if re.search(r'\d', email):
         score += 1
 
@@ -191,7 +221,7 @@ async def process_single(file):
 
 
 # ---------------------------
-# BATCH
+# BATCH ASYNC
 # ---------------------------
 async def process_all(files):
     tasks = [process_single(f) for f in files]
@@ -203,7 +233,7 @@ async def process_all(files):
 
 
 # ---------------------------
-# EXPORT
+# EXPORT EXCEL
 # ---------------------------
 def to_excel(df):
     output = BytesIO()
@@ -215,18 +245,29 @@ def to_excel(df):
 # ---------------------------
 # UI
 # ---------------------------
-st.title("🚀 CV Parser – Smart Email Fix")
+st.set_page_config(page_title="CV Parser AI", layout="wide")
 
-files = st.file_uploader("Upload CVs", type=["pdf"], accept_multiple_files=True)
+st.title("🚀 CV Parser – OCR API + Smart Email Fix")
+
+files = st.file_uploader(
+    "Upload CVs (PDF)",
+    type=["pdf"],
+    accept_multiple_files=True
+)
 
 if files:
+    st.info(f"{len(files)} files uploaded")
+
     if st.button("Process"):
-        df = asyncio.run(process_all(files))
+        with st.spinner("Processing CVs..."):
+            df = asyncio.run(process_all(files))
+
+        st.success("Done!")
 
         st.dataframe(df, width='stretch')
 
         st.download_button(
-            "Download Excel",
+            "📥 Download Excel",
             data=to_excel(df),
-            file_name="cv.xlsx"
+            file_name="cv_data.xlsx"
         )
