@@ -1,6 +1,6 @@
+import os
 import streamlit as st
 import pdfplumber
-import pytesseract
 import pandas as pd
 from io import BytesIO
 import cv2
@@ -9,7 +9,7 @@ from openai import OpenAI
 import asyncio
 import re
 
-client = OpenAI()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 EMAIL_REGEX = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
 
@@ -41,13 +41,8 @@ def extract_text_from_pdf(file):
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
-
-            if page_text and len(page_text.strip()) > 50:
+            if page_text:
                 text += page_text + "\n"
-            else:
-                image = page.to_image(resolution=400).original
-                processed = preprocess_image(image)
-                text += pytesseract.image_to_string(processed) + "\n"
 
     return text
 
