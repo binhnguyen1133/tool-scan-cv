@@ -7,6 +7,7 @@ import asyncio
 import re
 import requests
 import logging
+import zipfile
 from openai import OpenAI
 
 # ---------------------------
@@ -18,7 +19,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 ocr_key = os.getenv("OCR_API_KEY")
 
 EMAIL_REGEX = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
-
 COMMON_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com"]
 
 # ---------------------------
@@ -56,15 +56,12 @@ def extract_text_from_pdf(file):
             for page in pdf.pages:
                 try:
                     t = page.extract_text()
-
                     if t and len(t.strip()) > 30:
                         text += t + "\n"
                         continue
+                except:
+                    pass
 
-                except Exception as e:
-                    print("Text layer error:", e)
-
-                # OCR fallback (high resolution)
                 try:
                     img = page.to_image(resolution=450).original
                     buf = BytesIO()
@@ -72,9 +69,8 @@ def extract_text_from_pdf(file):
 
                     ocr_text = ocr_space_image(buf.getvalue())
                     text += ocr_text + "\n"
-
-                except Exception as e:
-                    print("OCR fail:", e)
+                except:
+                    pass
 
     except Exception as e:
         print("PDF open fail:", e)
@@ -82,7 +78,7 @@ def extract_text_from_pdf(file):
     return text
 
 # ---------------------------
-# SMART EMAIL FIX (OCR SAFE)
+# EMAIL FIX
 # ---------------------------
 def smart_fix_email(email: str):
     if not email:
@@ -95,22 +91,19 @@ def smart_fix_email(email: str):
     local, domain = parts
 
     domain = domain.lower()
-
-    # fix OCR domain mistakes
     domain = domain.replace("0", "o")
     domain = domain.replace("gmai1.com", "gmail.com")
     domain = domain.replace("gmai.com", "gmail.com")
     domain = domain.replace("gmali.com", "gmail.com")
     domain = domain.replace("gma1l.com", "gmail.com")
 
-    # fix missing m
     if domain.endswith("gmail.co"):
         domain += "m"
 
     return f"{local}@{domain}"
 
 # ---------------------------
-# AI EMAIL EXTRACT
+# AI EMAIL
 # ---------------------------
 async def extract_email_ai(text):
     prompt = f"""
@@ -133,28 +126,18 @@ Return ONLY 1 email.
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-
         return res.choices[0].message.content.strip()
-
     except:
         return ""
 
-# ---------------------------
-# EMAIL ENGINE
-# ---------------------------
 async def extract_best_email(text):
-    raw_candidates = list(set(re.findall(EMAIL_REGEX, text)))
-    candidates = [smart_fix_email(e) for e in raw_candidates]
+    candidates = list(set(re.findall(EMAIL_REGEX, text)))
 
     if len(candidates) == 1:
-        return candidates[0]
+        return smart_fix_email(candidates[0])
 
     ai_email = await extract_email_ai(text)
-
-    if ai_email:
-        return smart_fix_email(ai_email)
-
-    return candidates[0] if candidates else ""
+    return smart_fix_email(ai_email)
 
 # ---------------------------
 # EMAIL CONFIDENCE
@@ -170,9 +153,6 @@ def email_confidence(email):
 
     if any(d in email for d in COMMON_DOMAINS):
         score += 5
-
-    if not re.match(EMAIL_REGEX, email):
-        score -= 40
 
     return max(0, min(score, 100))
 
@@ -194,7 +174,7 @@ def extract_phone(text):
     return ""
 
 # ---------------------------
-# AI NAME
+# AI NAME (CLEAN)
 # ---------------------------
 async def extract_name_ai(text):
     prompt = f"Extract full name only:\n{text[:2000]}"
@@ -247,7 +227,7 @@ async def process_single(file):
         }
 
 # ---------------------------
-# BATCH PROCESS
+# BATCH
 # ---------------------------
 async def process_all(files):
     semaphore = asyncio.Semaphore(5)
@@ -257,11 +237,9 @@ async def process_all(files):
             return await process_single(f)
 
     tasks = [task(f) for f in files]
-
     results = await asyncio.gather(*tasks)
 
-    df = pd.DataFrame(results)
-    return df.fillna("")
+    return pd.DataFrame(results).fillna("")
 
 # ---------------------------
 # EXPORT EXCEL
@@ -271,6 +249,33 @@ def to_excel(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
     return output.getvalue()
+
+# ---------------------------
+# BUILD ZIP (AUTO INCREMENT)
+# ---------------------------
+def build_zip(files, df, start_number, prefix_text, postfix=""):
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w") as zf:
+        for i, file in enumerate(files):
+            try:
+                name = df.iloc[i]["Name"] or "Unknown"
+                name = re.sub(r'[\\/*?:"<>|]', "", name)
+
+                number = start_number + i
+
+                new_filename = f"{number} {prefix_text} {name} {postfix}".strip()
+                new_filename = re.sub(r'\s+', ' ', new_filename)
+
+                new_filename += ".pdf"
+
+                zf.writestr(new_filename, file.getvalue())
+
+            except Exception as e:
+                print("ZIP error:", e)
+
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 # ---------------------------
 # UI
@@ -299,36 +304,40 @@ if files:
         st.success("Done!")
 
 # ---------------------------
-# RESULTS + EDIT
+# RESULTS
 # ---------------------------
 if st.session_state.df is not None:
     df = st.session_state.df
 
-    st.subheader("📊 Results (Editable)")
-
-    edited_df = st.data_editor(
-        df,
-        width='stretch',
-        height=500,          # 👈 show nhiều rows hơn (~10)
-        num_rows="fixed"     # 👈 disable add row
-    )
-
-    # highlight nghi ngờ
-    def highlight_row(row):
-        if row["Confidence (%)"] < 80:
-            return ["background-color: #fff3cd"] * len(row)
-        return [""] * len(row)
-
-    st.dataframe(
-        edited_df.style.apply(highlight_row, axis=1),
-        width='stretch',
-        height=500
-    )
-
-    st.session_state.df = edited_df
+    edited_df = st.data_editor(df, height=500)
 
     st.download_button(
         "📥 Download Excel",
         data=to_excel(edited_df),
         file_name="cv_results.xlsx"
     )
+
+    # ---------------------------
+    # RENAME
+    # ---------------------------
+    st.subheader("📁 Rename CV Files")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_number = st.number_input("Start Number", value=1)
+
+    with col2:
+        prefix_text = st.text_input("Prefix Text", "")
+
+    postfix = st.text_input("Postfix (optional)", "")
+
+    if st.button("📦 Download Renamed CVs"):
+        zip_file = build_zip(files, edited_df, start_number, prefix_text, postfix)
+
+        st.download_button(
+            label="📥 Download ZIP",
+            data=zip_file,
+            file_name="renamed_cvs.zip",
+            mime="application/zip"
+        )
