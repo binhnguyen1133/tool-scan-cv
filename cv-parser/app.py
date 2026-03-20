@@ -8,6 +8,7 @@ import re
 import requests
 import logging
 import zipfile
+import unicodedata
 from openai import OpenAI
 
 # ---------------------------
@@ -20,6 +21,34 @@ ocr_key = os.getenv("OCR_API_KEY")
 
 EMAIL_REGEX = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'
 COMMON_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com"]
+
+# ---------------------------
+# REMOVE VIETNAMESE ACCENT
+# ---------------------------
+import unicodedata
+import re
+
+def remove_accents(text):
+    if not text:
+        return ""
+
+    # 1. Remove accents
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+
+    # 2. Lowercase
+    text = text.lower()
+
+    # 3. Remove special characters (giữ lại space)
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+
+    # 4. Normalize spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # 5. Title Case (viết hoa chữ cái đầu mỗi từ)
+    text = text.title()
+
+    return text
 
 # ---------------------------
 # OCR API
@@ -93,8 +122,6 @@ def smart_fix_email(email: str):
     domain = domain.lower()
     domain = domain.replace("0", "o")
     domain = domain.replace("gmai1.com", "gmail.com")
-    domain = domain.replace("gmai.com", "gmail.com")
-    domain = domain.replace("gmali.com", "gmail.com")
     domain = domain.replace("gma1l.com", "gmail.com")
 
     if domain.endswith("gmail.co"):
@@ -205,11 +232,14 @@ async def process_single(file):
         phone = extract_phone(text)
         name = await extract_name_ai(text)
 
+        name_format = remove_accents(name)
+
         confidence = email_confidence(email)
 
         return {
             "File Name": file.name,
             "Name": name,
+            "Name (No Accent)": name_format,
             "Email": email,
             "Confidence (%)": confidence,
             "Phone": phone,
@@ -220,6 +250,7 @@ async def process_single(file):
         return {
             "File Name": file.name,
             "Name": "ERROR",
+            "Name (No Accent)": "",
             "Email": "",
             "Confidence (%)": 0,
             "Phone": "",
@@ -251,7 +282,7 @@ def to_excel(df):
     return output.getvalue()
 
 # ---------------------------
-# BUILD ZIP (AUTO INCREMENT)
+# BUILD ZIP (USE name_format)
 # ---------------------------
 def build_zip(files, df, start_number, prefix_text, postfix=""):
     zip_buffer = BytesIO()
@@ -259,7 +290,7 @@ def build_zip(files, df, start_number, prefix_text, postfix=""):
     with zipfile.ZipFile(zip_buffer, "w") as zf:
         for i, file in enumerate(files):
             try:
-                name = df.iloc[i]["Name"] or "Unknown"
+                name = df.iloc[i]["Name (No Accent)"] or "Unknown"
                 name = re.sub(r'[\\/*?:"<>|]', "", name)
 
                 number = start_number + i
