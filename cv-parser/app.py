@@ -28,19 +28,21 @@ COMMON_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com"]
 import unicodedata
 import re
 
-def remove_accents(text):
+def remove_accents(text, check):
     if not text:
         return ""
 
     # 1. Remove accents
-    text = unicodedata.normalize('NFD', text)
+    if check:
+        text = unicodedata.normalize('NFD', text)
     text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
 
     # 2. Lowercase
     text = text.lower()
 
     # 3. Remove special characters (giữ lại space)
-    text = re.sub(r'[^a-z0-9\s]', '', text)
+    if check:
+        text = re.sub(r'[^a-z0-9\s]', '', text)
 
     # 4. Normalize spaces
     text = re.sub(r'\s+', ' ', text).strip()
@@ -232,13 +234,14 @@ async def process_single(file):
         phone = extract_phone(text)
         name = await extract_name_ai(text)
 
-        name_format = remove_accents(name)
+        normalize_name = remove_accents(name, 0)
+        name_format = remove_accents(name, 1)
 
         confidence = email_confidence(email)
 
         return {
             "File Name": file.name,
-            "Name": name,
+            "Name": normalize_name,
             "Name (No Accent)": name_format,
             "Email": email,
             "Confidence (%)": confidence,
