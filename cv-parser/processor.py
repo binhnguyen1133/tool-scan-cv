@@ -1,7 +1,7 @@
 import asyncio
 import pandas as pd
 from pdf_engine import extract_text_from_pdf
-from ai_engine import extract_best_email, extract_name_ai
+from ai_engine import extract_best_email, extract_name_ai, extract_best_school
 from utils import smart_fix_email, extract_phone, remove_accents, email_confidence
 
 # ---------------------------
@@ -16,6 +16,7 @@ async def process_single(file):
 
         phone = extract_phone(text)
         name = await extract_name_ai(text)
+        education = await extract_best_school(text)
 
         normalize_name = remove_accents(name, 0)
         name_format = remove_accents(name, 1)
@@ -29,6 +30,7 @@ async def process_single(file):
             "Email": email,
             "Confidence (%)": confidence,
             "Phone": phone,
+            "Education": education,
             "Error": ""
         }
 
@@ -40,6 +42,7 @@ async def process_single(file):
             "Email": "",
             "Confidence (%)": 0,
             "Phone": "",
+            "Education": "",
             "Error": str(e)
         }
 
