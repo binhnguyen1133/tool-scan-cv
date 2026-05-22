@@ -92,10 +92,18 @@ def extract_phone(text):
 # ---------------------------
 # EXPORT EXCEL
 # ---------------------------
+_ILLEGAL_CHARS_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+
+def _sanitize_cell(val):
+    if isinstance(val, str):
+        return _ILLEGAL_CHARS_RE.sub('', val)
+    return val
+
 def to_excel(df):
+    clean = df.map(_sanitize_cell)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
+        clean.to_excel(writer, index=False)
     return output.getvalue()
 
 # ---------------------------
