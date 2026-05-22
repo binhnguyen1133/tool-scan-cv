@@ -43,7 +43,7 @@ async def process_single(file):
 # BATCH
 # ---------------------------
 async def process_all(files):
-    semaphore = asyncio.Semaphore(3)
+    semaphore = asyncio.Semaphore(5)
 
     async def task(f):
         async with semaphore:

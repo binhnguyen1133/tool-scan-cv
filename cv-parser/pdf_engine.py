@@ -46,39 +46,54 @@ def extract_text_and_image(file) -> tuple:
 
     text = ""
     first_page_b64 = None
-    pages_need_ocr: set[int] = set()
+    first_page_text_len = 0
 
-    # --- Pass 1: text via pdfplumber ---
+    # --- Pass 1: collect text from pdfplumber (better layout) ---
+    plumber_text: dict[int, str] = {}
     try:
         with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
             for i, page in enumerate(pdf.pages):
                 try:
-                    t = page.extract_text()
-                    if t and len(t.strip()) > 30:
-                        text += t + "\n"
-                    else:
-                        pages_need_ocr.add(i)
+                    t = page.extract_text() or ""
+                    plumber_text[i] = t.strip()
                 except Exception:
-                    pages_need_ocr.add(i)
+                    plumber_text[i] = ""
     except Exception as e:
         print("pdfplumber error:", e)
 
-    # --- Pass 2: image rendering via PyMuPDF ---
+    # --- Pass 2: PyMuPDF for text (more complete) + image rendering ---
+    pages_need_ocr: set[int] = set()
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         for i in range(len(doc)):
-            page = doc[i]
+            fitz_page = doc[i]
+
+            # Prefer whichever extractor gives more text (usually fitz is more complete)
+            t_fitz = (fitz_page.get_text() or "").strip()
+            t_plumber = plumber_text.get(i, "")
+            t = t_fitz if len(t_fitz) >= len(t_plumber) else t_plumber
+
+            if len(t) > 30:
+                text += t + "\n"
+                if i == 0:
+                    first_page_text_len = len(t)
+            else:
+                pages_need_ocr.add(i)
+
+        # Image rendering pass — always render page 0 for vision
+        # (design-tool PDFs like Figma/Canva have truncated text layers; image is ground truth)
+        for i in range(len(doc)):
+            fitz_page = doc[i]
             need_ocr = (i in pages_need_ocr) and ocr_key
 
             if i == 0:
-                # Render at higher res when OCR is also needed, reuse for vision
                 res = 300 if need_ocr else 150
-                png = _render_page(page, res)
+                png = _render_page(fitz_page, res)
                 first_page_b64 = base64.b64encode(png).decode()
                 if need_ocr:
                     text += ocr_space_image(png) + "\n"
             elif need_ocr:
-                png = _render_page(page, 300)
+                png = _render_page(fitz_page, 300)
                 text += ocr_space_image(png) + "\n"
 
         doc.close()
