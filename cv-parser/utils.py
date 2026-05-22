@@ -39,19 +39,28 @@ def smart_fix_email(email: str):
     if not email:
         return email
 
+    email = email.strip().rstrip('.,;:()')
+
     parts = email.split("@")
     if len(parts) != 2:
         return email
 
     local, domain = parts
 
-    domain = domain.lower()
-    domain = domain.replace("0", "o")
+    # Fix domain OCR errors
+    domain = domain.lower().strip()
+    domain = re.sub(r'^0+', '', domain)          # leading zeros
     domain = domain.replace("gmai1.com", "gmail.com")
     domain = domain.replace("gma1l.com", "gmail.com")
+    domain = domain.replace("gmaii.com", "gmail.com")
+    domain = domain.replace("yah00.com", "yahoo.com")
+    domain = re.sub(r'(?<=[a-z])0(?=[a-z])', 'o', domain)  # 0→o between letters
 
     if domain.endswith("gmail.co"):
         domain += "m"
+
+    # Fix local part OCR: rn→m in common patterns
+    local = re.sub(r'rn(?=[a-z])', 'm', local)
 
     return f"{local}@{domain}"
 
@@ -76,14 +85,21 @@ def email_confidence(email):
 # PHONE
 # ---------------------------
 def extract_phone(text):
-    matches = re.findall(r'(\+?\d[\d\s\-\.\(\)]{8,})', text)
+    # Priority 1: Vietnamese mobile (10 digits: 0[3-9]xxxxxxxx)
+    vn_matches = re.findall(r'(?<!\d)(0[3-9]\d{8})(?!\d)', re.sub(r'[\s\-\.]', '', text))
+    if vn_matches:
+        return vn_matches[0]
 
-    for m in matches:
+    # Priority 2: +84 international format → convert to local
+    intl_matches = re.findall(r'(?<!\d)(\+84[3-9]\d{8})(?!\d)', re.sub(r'[\s\-\.]', '', text))
+    if intl_matches:
+        return '0' + intl_matches[0][3:]
+
+    # Fallback: any digit sequence 9-11 digits
+    for m in re.findall(r'(\+?\d[\d\s\-\.\(\)]{8,})', text):
         digits = re.sub(r'\D', '', m)
-
-        if digits.startswith("84"):
+        if digits.startswith("84") and len(digits) == 11:
             digits = "0" + digits[2:]
-
         if 9 <= len(digits) <= 11:
             return digits
 
