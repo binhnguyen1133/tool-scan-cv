@@ -29,7 +29,7 @@ def ocr_space_image(image_bytes: bytes) -> str:
 def _render_page(fitz_page, resolution: int) -> bytes:
     scale = resolution / 72
     pix = fitz_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
-    return pix.tobytes("png")
+    return pix.tobytes("jpeg", jpg_quality=85)
 
 
 # ---------------------------
@@ -87,7 +87,7 @@ def extract_text_and_image(file) -> tuple:
             need_ocr = (i in pages_need_ocr) and ocr_key
 
             if i == 0:
-                res = 300 if need_ocr else 150
+                res = 300 if need_ocr else 96
                 png = _render_page(fitz_page, res)
                 first_page_b64 = base64.b64encode(png).decode()
                 if need_ocr:

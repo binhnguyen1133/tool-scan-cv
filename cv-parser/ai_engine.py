@@ -54,7 +54,7 @@ async def extract_all_fields(text: str, image_b64: str = None) -> dict:
         content.append({
             "type": "image_url",
             "image_url": {
-                "url": f"data:image/png;base64,{image_b64}",
+                "url": f"data:image/jpeg;base64,{image_b64}",
                 "detail": "high"
             }
         })

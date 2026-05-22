@@ -1,10 +1,6 @@
 streamlit
 pdfplumber
 pymupdf
-pytesseract
-opencv-python-headless
 pandas
 openpyxl
-numpy
 openai
-dnspython
