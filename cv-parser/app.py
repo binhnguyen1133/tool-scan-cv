@@ -1,5 +1,7 @@
 import streamlit as st
 import asyncio
+import time
+import threading
 from processor import process_all
 from utils import to_excel, build_zip
 
@@ -31,8 +33,26 @@ if files:
         st.info(f"{n} files uploaded")
 
     if st.button("🚀 Process CVs"):
-        with st.spinner(f"Processing {n} CVs concurrently…"):
-            st.session_state.df = asyncio.run(process_all(files))
+        progress_bar = st.progress(0, text=f"0/{n} CVs processed…")
+        counter = {"done": 0}
+        result_holder = [None]
+
+        def _run():
+            result_holder[0] = asyncio.run(
+                process_all(files, on_done=lambda: counter.update(done=counter["done"] + 1))
+            )
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
+        while t.is_alive():
+            done = counter["done"]
+            progress_bar.progress(done / n, text=f"{done}/{n} CVs processed…")
+            time.sleep(0.3)
+
+        t.join()
+        progress_bar.progress(1.0, text=f"{n}/{n} CVs processed")
+        st.session_state.df = result_holder[0]
         st.success(f"Done! Processed {n} CVs.")
 
 # ---------------------------
