@@ -1,4 +1,3 @@
-import asyncio
 import json
 from config import client
 from utils import smart_fix_email, normalize_phone
@@ -50,10 +49,7 @@ CV TEXT (may have truncated characters — use image as ground truth):
 Return JSON only: {{"name": "...", "email": "...", "phone": "..."}}"""
 
 
-# ---------------------------
-# NAME ONLY (fast path)
-# ---------------------------
-async def extract_name_ai(text: str, image_b64: str = None) -> str:
+def extract_name_ai(text: str, image_b64: str = None) -> str:
     image_note = (
         "The image of the first CV page is attached — use it as the primary source for the name."
         if image_b64 else ""
@@ -69,8 +65,7 @@ async def extract_name_ai(text: str, image_b64: str = None) -> str:
     content.append({"type": "text", "text": prompt})
 
     try:
-        res = await asyncio.to_thread(
-            client.chat.completions.create,
+        res = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[{"role": "user", "content": content}],
             temperature=0,
@@ -83,10 +78,7 @@ async def extract_name_ai(text: str, image_b64: str = None) -> str:
         return ""
 
 
-# ---------------------------
-# FULL EXTRACTION (slow path)
-# ---------------------------
-async def extract_all_ai(text: str, image_b64: str = None) -> dict:
+def extract_all_ai(text: str, image_b64: str = None) -> dict:
     image_note = (
         "The image of the first CV page is attached — use it as the primary source for name, "
         "email, and phone. The raw text may have truncated characters due to PDF encoding bugs."
@@ -103,8 +95,7 @@ async def extract_all_ai(text: str, image_b64: str = None) -> dict:
     content.append({"type": "text", "text": prompt})
 
     try:
-        res = await asyncio.to_thread(
-            client.chat.completions.create,
+        res = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[{"role": "user", "content": content}],
             temperature=0,

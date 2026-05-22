@@ -25,18 +25,16 @@ def _render_page(fitz_page, resolution: int) -> bytes:
 
 
 # ---------------------------
-# FAST PATH — text only, no image rendering
+# FAST PATH — text only, no image (accepts bytes, no re-read)
 # ---------------------------
-def extract_text_only(file) -> tuple[str, set]:
-    """pdfplumber text extraction only. Returns (text, pages_need_ocr)."""
-    file.seek(0)
-    pdf_bytes = file.read()
+def extract_text_only(pdf_bytes: bytes) -> tuple[str, set]:
+    """pdfplumber, first 2 pages only. Returns (text, pages_need_ocr)."""
     text = ""
     pages_need_ocr: set[int] = set()
 
     try:
         with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            for i, page in enumerate(pdf.pages):
+            for i, page in enumerate(pdf.pages[:2]):  # contact info always on page 1-2
                 try:
                     t = (page.extract_text() or "").strip()
                     if len(t) > 30:
@@ -52,14 +50,10 @@ def extract_text_only(file) -> tuple[str, set]:
 
 
 # ---------------------------
-# SLOW PATH — image rendering + OCR (called lazily)
+# SLOW PATH — image rendering + OCR (accepts bytes, no re-read)
 # ---------------------------
-def render_first_page(file, pages_need_ocr: set) -> tuple[str | None, str]:
-    """Render first page as JPEG + OCR image-only pages.
-    Returns (image_b64, extra_ocr_text).
-    """
-    file.seek(0)
-    pdf_bytes = file.read()
+def render_first_page(pdf_bytes: bytes, pages_need_ocr: set) -> tuple[str | None, str]:
+    """Render first page as JPEG + OCR if needed. Returns (image_b64, extra_ocr_text)."""
     image_b64 = None
     extra_text = ""
 
@@ -74,7 +68,7 @@ def render_first_page(file, pages_need_ocr: set) -> tuple[str | None, str]:
             if need_ocr_p0:
                 extra_text += ocr_space_image(png) + "\n"
 
-        for i in range(1, len(doc)):
+        for i in range(1, min(len(doc), 2)):
             if (i in pages_need_ocr) and ocr_key:
                 png = _render_page(doc[i], 300)
                 extra_text += ocr_space_image(png) + "\n"

@@ -1,5 +1,4 @@
 import streamlit as st
-import asyncio
 import time
 import threading
 from processor import process_all
@@ -38,8 +37,8 @@ if files:
         result_holder = [None]
 
         def _run():
-            result_holder[0] = asyncio.run(
-                process_all(files, on_done=lambda: counter.update(done=counter["done"] + 1))
+            result_holder[0] = process_all(
+                files, on_done=lambda: counter.update(done=counter["done"] + 1)
             )
 
         t = threading.Thread(target=_run, daemon=True)
