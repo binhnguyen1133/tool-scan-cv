@@ -1,36 +1,31 @@
 import asyncio
 import pandas as pd
-from pdf_engine import extract_text_from_pdf
-from ai_engine import extract_best_email, extract_name_ai, extract_best_school
-from utils import smart_fix_email, extract_phone, remove_accents, email_confidence
+from pdf_engine import extract_text_and_image
+from ai_engine import extract_all_fields
+from utils import remove_accents
 
 # ---------------------------
 # PROCESS SINGLE
 # ---------------------------
 async def process_single(file):
     try:
-        text = await asyncio.to_thread(extract_text_from_pdf, file)
+        text, image_b64 = await asyncio.to_thread(extract_text_and_image, file)
 
-        email = await extract_best_email(text)
-        email = smart_fix_email(email)  # extra safety
+        fields = await extract_all_fields(text, image_b64)
 
-        phone = extract_phone(text)
-        name = await extract_name_ai(text)
-        education = await extract_best_school(text)
+        name = fields["name"]
+        email = fields["email"]
+        phone = fields["phone"]
 
         normalize_name = remove_accents(name, 0)
         name_format = remove_accents(name, 1)
-
-        confidence = email_confidence(email)
 
         return {
             "File Name": file.name,
             "Name": normalize_name,
             "Name (No Accent)": name_format,
             "Email": email,
-            "Confidence (%)": confidence,
             "Phone": phone,
-            "Education": education,
             "Error": ""
         }
 
@@ -40,9 +35,7 @@ async def process_single(file):
             "Name": "ERROR",
             "Name (No Accent)": "",
             "Email": "",
-            "Confidence (%)": 0,
             "Phone": "",
-            "Education": "",
             "Error": str(e)
         }
 
@@ -50,7 +43,7 @@ async def process_single(file):
 # BATCH
 # ---------------------------
 async def process_all(files):
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(3)
 
     async def task(f):
         async with semaphore:

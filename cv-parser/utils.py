@@ -84,42 +84,44 @@ def email_confidence(email):
 # ---------------------------
 # PHONE
 # ---------------------------
-def extract_phone(text):
-    # Priority 1: Vietnamese mobile (10 digits: 0[3-9]xxxxxxxx)
-    vn_matches = re.findall(r'(?<!\d)(0[3-9]\d{8})(?!\d)', re.sub(r'[\s\-\.]', '', text))
-    if vn_matches:
-        return vn_matches[0]
+_VN_PHONE_RE = re.compile(
+    r'(?<!\d)'                      # không phải digit trước
+    r'(\+?84|0)'                    # prefix: +84, 84, or 0
+    r'([3-9]\d{8})'                 # 9 chữ số còn lại (03x-09x)
+    r'(?!\d)'                       # không phải digit sau
+)
 
-    # Priority 2: +84 international format → convert to local
-    intl_matches = re.findall(r'(?<!\d)(\+84[3-9]\d{8})(?!\d)', re.sub(r'[\s\-\.]', '', text))
-    if intl_matches:
-        return '0' + intl_matches[0][3:]
+def normalize_phone(raw: str) -> str:
+    if not raw:
+        return ""
+    digits = re.sub(r'\D', '', raw)
+    if digits.startswith("84") and len(digits) == 11:
+        digits = "0" + digits[2:]
+    if len(digits) == 10 and digits[0] == "0":
+        return digits
+    return raw  # trả về nguyên gốc nếu không match
 
-    # Fallback: any digit sequence 9-11 digits
-    for m in re.findall(r'(\+?\d[\d\s\-\.\(\)]{8,})', text):
-        digits = re.sub(r'\D', '', m)
-        if digits.startswith("84") and len(digits) == 11:
-            digits = "0" + digits[2:]
-        if 9 <= len(digits) <= 11:
-            return digits
-
+def extract_phone(text: str) -> str:
+    for m in _VN_PHONE_RE.finditer(text):
+        prefix, body = m.group(1), m.group(2)
+        return "0" + body
     return ""
 
 # ---------------------------
 # EXPORT EXCEL
 # ---------------------------
-_ILLEGAL_CHARS_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+_ILLEGAL_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
 
-def _sanitize_cell(val):
+def _clean_cell(val):
     if isinstance(val, str):
-        return _ILLEGAL_CHARS_RE.sub('', val)
+        return _ILLEGAL_CHARS.sub('', val)
     return val
 
 def to_excel(df):
-    clean = df.map(_sanitize_cell)
+    clean_df = df.map(_clean_cell)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        clean.to_excel(writer, index=False)
+        clean_df.to_excel(writer, index=False)
     return output.getvalue()
 
 # ---------------------------

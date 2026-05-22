@@ -1,5 +1,6 @@
 streamlit
 pdfplumber
+pymupdf
 pytesseract
 opencv-python-headless
 pandas

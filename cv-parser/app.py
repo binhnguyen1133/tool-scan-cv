@@ -1,7 +1,10 @@
 import streamlit as st
 import asyncio
-from processor import process_all
+import pandas as pd
+from processor import process_single
 from utils import to_excel, build_zip
+
+MAX_FILES = 50
 
 # ---------------------------
 # UI
@@ -20,14 +23,26 @@ if "df" not in st.session_state:
     st.session_state.df = None
 
 if files:
-    st.info(f"{len(files)} files uploaded")
+    n = len(files)
+    if n > MAX_FILES:
+        st.warning(f"⚠️ {n} files uploaded — limit is {MAX_FILES}. Only the first {MAX_FILES} will be processed.")
+        files = files[:MAX_FILES]
+        n = MAX_FILES
+    else:
+        st.info(f"{n} files uploaded")
 
     if st.button("🚀 Process CVs"):
-        with st.spinner("Processing..."):
-            df = asyncio.run(process_all(files))
+        progress_bar = st.progress(0, text="Starting…")
+        results = []
 
-        st.session_state.df = df
-        st.success("Done!")
+        for i, f in enumerate(files):
+            progress_bar.progress(i / n, text=f"Processing {i + 1}/{n}: {f.name}")
+            result = asyncio.run(process_single(f))
+            results.append(result)
+
+        progress_bar.progress(1.0, text="Done!")
+        st.session_state.df = pd.DataFrame(results).fillna("")
+        st.success(f"Done! Processed {n} CVs.")
 
 # ---------------------------
 # RESULTS
