@@ -1,10 +1,11 @@
 import re
+import gc
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pdf_engine import extract_text_only, render_first_page
 from ai_engine import extract_name_ai, extract_all_ai
 from utils import remove_accents, smart_fix_email, email_confidence, extract_phone
-from config import EMAIL_REGEX
+from config import EMAIL_REGEX, CONCURRENCY
 
 
 def process_single(file):
@@ -51,14 +52,28 @@ def process_single(file):
         }
 
 
-def process_all(files, on_done=None):
+def process_all(files, on_progress=None):
+    """Process files with bounded concurrency, reporting progress per completed file.
+
+    Runs inline in the caller's thread (Streamlit script thread) so that
+    `on_progress(done, total)` can safely update `st.progress`. Concurrency is
+    capped (CONCURRENCY) to bound peak memory from simultaneous PDF renders.
+    """
     results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    total = len(files)
+    done = 0
+
+    with ThreadPoolExecutor(max_workers=CONCURRENCY) as executor:
         futures = {executor.submit(process_single, f): f for f in files}
         for future in as_completed(futures):
             results.append(future.result())
-            if on_done:
-                on_done()
+            done += 1
+            if on_progress:
+                on_progress(done, total)
+            if done % 25 == 0:  # release pdfplumber/pixmap garbage between batches
+                gc.collect()
+
+    gc.collect()
 
     # Restore original upload order
     order = {f.name: i for i, f in enumerate(files)}

@@ -1,6 +1,27 @@
 import json
+import time
 from config import client
 from utils import smart_fix_email, normalize_phone
+
+
+def _chat_with_retry(content, retries: int = 2):
+    """OpenAI call with exponential backoff — absorbs rate-limit/timeout bursts at scale."""
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            res = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[{"role": "user", "content": content}],
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            return json.loads(res.choices[0].message.content)
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(2 ** attempt)  # 1s, 2s
+                continue
+    raise last_err
 
 NAME_ONLY_PROMPT = """\
 Extract the full name of the CV candidate.
@@ -65,13 +86,7 @@ def extract_name_ai(text: str, image_b64: str = None) -> str:
     content.append({"type": "text", "text": prompt})
 
     try:
-        res = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": content}],
-            temperature=0,
-            response_format={"type": "json_object"}
-        )
-        data = json.loads(res.choices[0].message.content)
+        data = _chat_with_retry(content)
         return (data.get("name") or "").strip()
     except Exception as e:
         print("AI name error:", e)
@@ -95,13 +110,7 @@ def extract_all_ai(text: str, image_b64: str = None) -> dict:
     content.append({"type": "text", "text": prompt})
 
     try:
-        res = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": content}],
-            temperature=0,
-            response_format={"type": "json_object"}
-        )
-        data = json.loads(res.choices[0].message.content)
+        data = _chat_with_retry(content)
         return {
             "name":  (data.get("name")  or "").strip(),
             "email": smart_fix_email((data.get("email") or "").strip()),

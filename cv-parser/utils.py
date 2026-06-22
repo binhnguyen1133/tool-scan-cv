@@ -1,5 +1,6 @@
 import re
 import unicodedata
+import tempfile
 import pandas as pd
 import zipfile
 from io import BytesIO
@@ -128,9 +129,13 @@ def to_excel(df):
 # BUILD ZIP (USE name_format)
 # ---------------------------
 def build_zip(files, df, start_number, prefix_text, postfix=""):
-    zip_buffer = BytesIO()
+    """Build the renamed ZIP on disk (one PDF at a time) to avoid holding a full
+    second copy of every PDF in RAM. Returns the temp file path; the caller is
+    responsible for reading/streaming it to the download widget."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp.close()
 
-    with zipfile.ZipFile(zip_buffer, "w") as zf:
+    with zipfile.ZipFile(tmp.name, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for i, file in enumerate(files):
             try:
                 # Lấy tên và sanitize
@@ -153,5 +158,4 @@ def build_zip(files, df, start_number, prefix_text, postfix=""):
             except Exception as e:
                 print("ZIP error:", e)
 
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
+    return tmp.name
