@@ -44,6 +44,10 @@ if files:
 if st.session_state.df is not None:
     df = st.session_state.df
 
+    if "MR_code" not in df.columns:
+        df["MR_code"] = st.session_state.get("mr_code_input", "")
+        st.session_state.df = df
+
     edited_df = st.data_editor(df, height=500)
 
     st.download_button(
@@ -66,6 +70,17 @@ if st.session_state.df is not None:
         prefix_text = st.text_input("Prefix Text", "")
 
     postfix = st.text_input("Postfix (optional)", "")
+
+    def _apply_mr_code():
+        if st.session_state.df is not None:
+            st.session_state.df["MR_code"] = st.session_state.mr_code_input
+
+    st.text_input(
+        "MR_code (optional)",
+        key="mr_code_input",
+        on_change=_apply_mr_code,
+        help="Nhập để set MR_code cho tất cả các row. Có thể chỉnh riêng từng row trong bảng.",
+    )
 
     if st.button("📦 Download Renamed CVs"):
         zip_path = build_zip(files, edited_df, start_number, prefix_text, postfix)

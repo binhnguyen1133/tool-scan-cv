@@ -36,9 +36,9 @@ def process_single(file):
             "File Name": file.name,
             "Name": remove_accents(name, 0),
             "Name (No Accent)": remove_accents(name, 1),
-            "Email": email,
             "Phone": phone,
-            "Error": ""
+            "Email": email,
+            "MR_code": "",
         }
 
     except Exception as e:
@@ -46,9 +46,9 @@ def process_single(file):
             "File Name": file.name,
             "Name": "ERROR",
             "Name (No Accent)": "",
-            "Email": "",
             "Phone": "",
-            "Error": str(e)
+            "Email": "",
+            "MR_code": "",
         }
 
 
