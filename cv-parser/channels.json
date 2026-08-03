@@ -1,0 +1,49 @@
+{
+  "EB Channel": [
+    "Careerspage",
+    "EB Events",
+    "Social Network",
+    "Email",
+    "Linkedin (Post)",
+    "Vieclam24h",
+    "Ybox"
+  ],
+  "Active Search": [
+    "Vietnamworks",
+    "Itviec",
+    "TopCV",
+    "Linkedin (Search)",
+    "Sales (Search)",
+    "Vieclam24h",
+    "TA Network",
+    "Thread"
+  ],
+  "Referral": [
+    "Referral"
+  ],
+  "Headhunt": [
+    "Michael Page",
+    "HR1",
+    "Robert Walters",
+    "Pegasi",
+    "We Network",
+    "Manpower"
+  ],
+  "Others": [
+    "Others"
+  ],
+  "Paid Ads": [
+    "Google Ads",
+    "Facebook Ads",
+    "Linkedin Ads"
+  ],
+  "Job Board": [
+    "Vietnamworks",
+    "Itviec",
+    "TopCV",
+    "TopDev"
+  ],
+  "Test": [
+    "Binhne"
+  ]
+}
