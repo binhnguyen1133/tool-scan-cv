@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -sI http://localhost:8501)"
+    ]
+  }
+}

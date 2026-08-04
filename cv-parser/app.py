@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -113,8 +114,10 @@ if st.session_state.df is not None:
         df["Name_Channel"] = st.session_state.get("name_channel_input", "")
     if "Position" not in df.columns:
         df["Position"] = st.session_state.get("position_input", "")
+    if "Input_date" not in df.columns:
+        df["Input_date"] = datetime.now().strftime("%d-%b-%Y")
     # Ensure Position sits right after Name (No Accent)
-    desired_order = ["File Name", "Name", "Name (No Accent)", "Position", "Phone", "Email", "MR_code", "Rec_Channel", "Name_Channel"]
+    desired_order = ["File Name", "Name", "Name (No Accent)", "Position", "Phone", "Email", "Input_date", "MR_code", "Rec_Channel", "Name_Channel"]
     df = df[[c for c in desired_order if c in df.columns] + [c for c in df.columns if c not in desired_order]]
     st.session_state.df = df
 
@@ -123,6 +126,49 @@ if st.session_state.df is not None:
 
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(editable=True, resizable=True, sortable=False, filter=False)
+
+    date_cell_editor = JsCode(
+        """
+        class DateCellEditor {
+            init(params) {
+                const months = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+                                Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+                this.eInput = document.createElement('input');
+                this.eInput.type = 'date';
+                this.eInput.style.width = '100%';
+                this.eInput.style.height = '100%';
+                this.eInput.style.border = 'none';
+                this.eInput.style.outline = 'none';
+                if (params.value) {
+                    const parts = String(params.value).split('-');
+                    if (parts.length === 3 && months[parts[1]]) {
+                        this.eInput.value = parts[2] + '-' + months[parts[1]] + '-' + parts[0].padStart(2,'0');
+                    }
+                }
+            }
+            getGui() { return this.eInput; }
+            afterGuiAttached() {
+                this.eInput.focus();
+                if (this.eInput.showPicker) { try { this.eInput.showPicker(); } catch(e) {} }
+            }
+            getValue() {
+                const v = this.eInput.value;
+                if (!v) return '';
+                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun',
+                                    'Jul','Aug','Sep','Oct','Nov','Dec'];
+                const [y, m, d] = v.split('-');
+                return d + '-' + monthNames[parseInt(m,10)-1] + '-' + y;
+            }
+            isPopup() { return false; }
+        }
+        """
+    )
+    gb.configure_column(
+        "Input_date",
+        cellEditor=date_cell_editor,
+        editable=True,
+        singleClickEdit=True,
+    )
 
     gb.configure_column(
         "Rec_Channel",
