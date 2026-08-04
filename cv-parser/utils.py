@@ -15,6 +15,7 @@ def remove_accents(text, check):
 
     # 1. Remove accents
     if check:
+        text = text.replace('Đ', 'D').replace('đ', 'd')
         text = unicodedata.normalize('NFD', text)
     text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
 
