@@ -40,7 +40,7 @@ with st.expander("⚙️ Update Channel (Rec_Channel ↔ Name_Channel mapping)")
     edited_channels = st.data_editor(
         channel_df,
         num_rows="dynamic",
-        use_container_width=True,
+        use_container_width='stretch',
         key="channel_editor",
         column_config={
             "Rec_Channel": st.column_config.TextColumn("Rec_Channel", required=True),
@@ -112,12 +112,9 @@ if st.session_state.df is not None:
         df["Rec_Channel"] = st.session_state.get("rec_channel_input", "")
     if "Name_Channel" not in df.columns:
         df["Name_Channel"] = st.session_state.get("name_channel_input", "")
-    if "Position" not in df.columns:
-        df["Position"] = st.session_state.get("position_input", "")
     if "Input_date" not in df.columns:
         df["Input_date"] = datetime.now().strftime("%d-%b-%Y")
-    # Ensure Position sits right after Name (No Accent)
-    desired_order = ["File Name", "Name", "Name (No Accent)", "Position", "Phone", "Email", "Input_date", "MR_code", "Rec_Channel", "Name_Channel"]
+    desired_order = ["File Name", "Name", "Name (No Accent)", "Phone", "Email", "Input_date", "MR_code", "Rec_Channel", "Name_Channel"]
     df = df[[c for c in desired_order if c in df.columns] + [c for c in df.columns if c not in desired_order]]
     st.session_state.df = df
 
@@ -253,18 +250,6 @@ if st.session_state.df is not None:
 
     def _bump_grid():
         st.session_state.grid_version = st.session_state.get("grid_version", 0) + 1
-
-    def _apply_position():
-        if st.session_state.df is not None:
-            st.session_state.df["Position"] = st.session_state.position_input
-        _bump_grid()
-
-    st.text_input(
-        "Position Name (optional)",
-        key="position_input",
-        on_change=_apply_position,
-        help="Nhập để set Position cho tất cả các row. Có thể chỉnh riêng từng row trong bảng.",
-    )
 
     def _apply_mr_code():
         if st.session_state.df is not None:
