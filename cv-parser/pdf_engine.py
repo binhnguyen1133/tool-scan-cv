@@ -2,7 +2,7 @@ import time
 import base64
 import requests
 import pdfplumber
-import fitz
+import pymupdf
 from io import BytesIO
 from config import ocr_key, OCR_DPI, MAX_IMAGE_SIDE
 
@@ -34,7 +34,7 @@ def _render_page(fitz_page, resolution: int) -> bytes:
     long_side_pt = max(rect.width, rect.height) or 1
     if long_side_pt * scale > MAX_IMAGE_SIDE:
         scale = MAX_IMAGE_SIDE / long_side_pt
-    pix = fitz_page.get_pixmap(matrix=fitz.Matrix(scale, scale))
+    pix = fitz_page.get_pixmap(matrix=pymupdf.Matrix(scale, scale))
     try:
         return pix.tobytes("jpeg", jpg_quality=85)
     finally:
@@ -76,7 +76,7 @@ def render_first_page(pdf_bytes: bytes, pages_need_ocr: set) -> tuple[str | None
     doc = None
 
     try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
 
         if len(doc) > 0:
             need_ocr_p0 = (0 in pages_need_ocr) and bool(ocr_key)

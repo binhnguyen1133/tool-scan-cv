@@ -40,7 +40,7 @@ with st.expander("⚙️ Update Channel (Rec_Channel ↔ Name_Channel mapping)")
     edited_channels = st.data_editor(
         channel_df,
         num_rows="dynamic",
-        use_container_width='stretch',
+        width='stretch',
         key="channel_editor",
         column_config={
             "Rec_Channel": st.column_config.TextColumn("Rec_Channel", required=True),
