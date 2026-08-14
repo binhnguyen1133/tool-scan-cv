@@ -307,13 +307,16 @@ if st.session_state.df is not None:
             help="Options tương ứng với Rec_Channel đã chọn. Apply cho tất cả các row.",
         )
 
-    if st.button("📦 Download Renamed CVs"):
-        zip_path = build_zip(files, edited_df, start_number, prefix_text, postfix)
+    # Build the zip lazily and cache by inputs so we don't rebuild on every rerun.
+    zip_key = (start_number, prefix_text, postfix, len(files), edited_df.to_json())
+    if st.session_state.get("_zip_key") != zip_key:
+        st.session_state["_zip_path"] = build_zip(files, edited_df, start_number, prefix_text, postfix)
+        st.session_state["_zip_key"] = zip_key
 
-        with open(zip_path, "rb") as f:
-            st.download_button(
-                label="📥 Download ZIP",
-                data=f,
-                file_name="renamed_cvs.zip",
-                mime="application/zip"
-            )
+    with open(st.session_state["_zip_path"], "rb") as f:
+        st.download_button(
+            label="📦 Download Renamed CVs",
+            data=f,
+            file_name="renamed_cvs.zip",
+            mime="application/zip",
+        )
