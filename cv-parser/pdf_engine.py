@@ -1,10 +1,16 @@
 import time
 import base64
+import threading
 import requests
 import pdfplumber
 import pymupdf
 from io import BytesIO
 from config import ocr_key, OCR_DPI, MAX_IMAGE_SIDE
+
+# PyMuPDF's C extension is not thread-safe; serialize all fitz calls across workers
+# to prevent SIGSEGV under ThreadPoolExecutor. Render is CPU-bound and this host
+# only has 2 vCPUs, so we lose nothing by not rendering in parallel.
+_PYMUPDF_LOCK = threading.Lock()
 
 
 def ocr_space_image(image_bytes: bytes, retries: int = 2) -> str:
@@ -75,26 +81,34 @@ def render_first_page(pdf_bytes: bytes, pages_need_ocr: set) -> tuple[str | None
     extra_text = ""
     doc = None
 
+    ocr_jobs: list[bytes] = []  # collected under the lock, sent to OCR outside it
+
     try:
-        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        with _PYMUPDF_LOCK:
+            try:
+                doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
 
-        if len(doc) > 0:
-            need_ocr_p0 = (0 in pages_need_ocr) and bool(ocr_key)
-            res = OCR_DPI if need_ocr_p0 else 96
-            png = _render_page(doc[0], res)
-            image_b64 = base64.b64encode(png).decode()
-            if need_ocr_p0:
-                extra_text += ocr_space_image(png) + "\n"
+                if len(doc) > 0:
+                    need_ocr_p0 = (0 in pages_need_ocr) and bool(ocr_key)
+                    res = OCR_DPI if need_ocr_p0 else 96
+                    png = _render_page(doc[0], res)
+                    image_b64 = base64.b64encode(png).decode()
+                    if need_ocr_p0:
+                        ocr_jobs.append(png)
 
-        for i in range(1, min(len(doc), 2)):
-            if (i in pages_need_ocr) and ocr_key:
-                png = _render_page(doc[i], OCR_DPI)
-                extra_text += ocr_space_image(png) + "\n"
+                for i in range(1, min(len(doc), 2)):
+                    if (i in pages_need_ocr) and ocr_key:
+                        ocr_jobs.append(_render_page(doc[i], OCR_DPI))
+            finally:
+                if doc is not None:
+                    doc.close()
+
+        # OCR.space calls are network I/O — run outside the lock so other workers
+        # can render while we wait.
+        for png in ocr_jobs:
+            extra_text += ocr_space_image(png) + "\n"
 
     except Exception as e:
         print("PyMuPDF error:", e)
-    finally:
-        if doc is not None:
-            doc.close()
 
     return image_b64, extra_text.strip()

@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, JsCode
 
 from processor import process_all
 from utils import to_excel, build_zip
@@ -216,13 +216,12 @@ if st.session_state.df is not None:
     response = AgGrid(
         df,
         gridOptions=grid_options,
-        update_mode=GridUpdateMode.MODEL_CHANGED,
+        update_on=["modelUpdated"],
         data_return_mode=DataReturnMode.AS_INPUT,
         allow_unsafe_jscode=True,
         height=500,
         theme="streamlit",
         key=f"aggrid_{grid_version}",
-        reload_data=False,
     )
     edited_df = pd.DataFrame(response["data"])
     st.session_state.df = edited_df.copy()
