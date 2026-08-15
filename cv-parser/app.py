@@ -116,13 +116,31 @@ if st.session_state.df is not None:
         df["Input_date"] = datetime.now().strftime("%d-%b-%Y")
     desired_order = ["File Name", "Name", "Name (No Accent)", "Phone", "Email", "Input_date", "MR_code", "Rec_Channel", "Name_Channel"]
     df = df[[c for c in desired_order if c in df.columns] + [c for c in df.columns if c not in desired_order]]
+
+    # Only reorder df on a fresh mount (bulk-apply bumped grid_version). Doing
+    # this on every rerun conflicts with AgGrid's internal column state during
+    # a drag and makes columns jitter.
+    grid_version = st.session_state.setdefault("grid_version", 0)
+    saved_col_order = st.session_state.get("column_order")
+    if saved_col_order and st.session_state.get("_last_mount_version") != grid_version:
+        ordered = [c for c in saved_col_order if c in df.columns]
+        remaining = [c for c in df.columns if c not in ordered]
+        df = df[ordered + remaining]
+    st.session_state["_last_mount_version"] = grid_version
+
     st.session_state.df = df
 
     channel_map_json = json.dumps(channels)
     all_names_json = json.dumps(all_names)
 
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(editable=True, resizable=True, sortable=False, filter=False)
+    gb.configure_default_column(
+        editable=True,
+        resizable=True,
+        sortable=False,
+        filter=False,
+        suppressMovable=False,
+    )
 
     date_cell_editor = JsCode(
         """
@@ -208,15 +226,20 @@ if st.session_state.df is not None:
         }}
         """
     )
-    gb.configure_grid_options(onCellValueChanged=on_cell_value_changed, stopEditingWhenCellsLoseFocus=True)
+    gb.configure_grid_options(
+        onCellValueChanged=on_cell_value_changed,
+        stopEditingWhenCellsLoseFocus=True,
+        suppressMovableColumns=False,
+        suppressDragLeaveHidesColumns=True,
+        animateRows=True,
+    )
 
     grid_options = gb.build()
 
-    grid_version = st.session_state.setdefault("grid_version", 0)
     response = AgGrid(
         df,
         gridOptions=grid_options,
-        update_on=["modelUpdated"],
+        update_on=["modelUpdated", "dragStopped"],
         data_return_mode=DataReturnMode.AS_INPUT,
         allow_unsafe_jscode=True,
         height=500,
@@ -224,11 +247,28 @@ if st.session_state.df is not None:
         key=f"aggrid_{grid_version}",
     )
     edited_df = pd.DataFrame(response["data"])
+
+    # Record the current column order (from user drag-drop) so the next
+    # bulk-apply remount rebuilds the grid in the user's chosen order.
+    col_state = response.get("columns_state") or response.get("column_state")
+    if col_state:
+        new_order = [c.get("colId") for c in col_state if c.get("colId")]
+        if new_order and new_order != st.session_state.get("column_order"):
+            st.session_state["column_order"] = new_order
+
     st.session_state.df = edited_df.copy()
+
+    # Reorder columns for Excel export to match the user's drag-drop order
+    export_df = edited_df
+    saved_col_order = st.session_state.get("column_order")
+    if saved_col_order:
+        ordered = [c for c in saved_col_order if c in export_df.columns]
+        remaining = [c for c in export_df.columns if c not in ordered]
+        export_df = export_df[ordered + remaining]
 
     st.download_button(
         "📥 Download Excel",
-        data=to_excel(edited_df),
+        data=to_excel(export_df),
         file_name="cv_results.xlsx"
     )
 
